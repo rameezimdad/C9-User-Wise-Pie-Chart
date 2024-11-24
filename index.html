@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>User Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    .chart-container {
+      width: 100%;
+      height: 300px;
+    }
+    @media (max-width: 768px) {
+      .grid-cols-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="flex items-center justify-center min-h-screen" id="loginContainer">
+    <div class="bg-white p-8 rounded shadow-md w-full max-w-md">
+      <h2 class="text-3xl font-bold mb-6 text-center text-blue-600">Login</h2>
+      <div class="mb-4">
+        <label for="username" class="block text-gray-700">Username:</label>
+        <input type="text" id="username" name="username" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your username">
+      </div>
+      <div class="mb-6">
+        <label for="password" class="block text-gray-700">Password:</label>
+        <input type="password" id="password" name="password" class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your password">
+      </div>
+      <button onclick="login()" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition duration-200">Login</button>
+    </div>
+  </div>
+
+  <div class="container mx-auto p-4 hidden" id="userContainer">
+    <div class="flex flex-col md:flex-row justify-between items-center mb-6">
+      <div class="text-xl font-semibold text-gray-800">
+        Welcome, <span id="loggedInUser" class="text-blue-600"></span>!
+      </div>
+      <button onclick="logout()" class="mt-4 md:mt-0 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition duration-200">Logout</button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-6">
+      <div class="bg-white p-4 rounded shadow-md">
+        <h3 class="text-lg font-medium text-gray-700 mb-2">Class Distribution</h3>
+        <div id="classChart" class="chart-container"></div>
+      </div>
+      <div class="bg-white p-4 rounded shadow-md">
+        <h3 class="text-lg font-medium text-gray-700 mb-2">Report Summary</h3>
+        <div id="reportChart" class="chart-container"></div>
+      </div>
+      <div class="bg-white p-4 rounded shadow-md">
+        <h3 class="text-lg font-medium text-gray-700 mb-2">Speaking Performance</h3>
+        <div id="speakingChart" class="chart-container"></div>
+      </div>
+      <div class="bg-white p-4 rounded shadow-md">
+        <h3 class="text-lg font-medium text-gray-700 mb-2">Reading Performance</h3>
+        <div id="readingChart" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    google.charts.load('current', {'packages':['corechart']});
+    google.charts.setOnLoadCallback(init);
+
+    function init() {}
+
+    function login() {
+      var username = document.getElementById("username").value.trim();
+      var password = document.getElementById("password").value.trim();
+      
+      if (username === "" || password === "") {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Incomplete Information',
+          text: 'Please enter both username and password.',
+        });
+        return;
+      }
+
+      var payload = {
+        "username": username,
+        "password": password
+      };
+      
+      Swal.fire({
+        title: 'Logging in...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      google.script.run.withSuccessHandler(handleLoginResponse).loginUser(payload);
+    }
+
+    function handleLoginResponse(response) {
+      Swal.close();
+
+      if (response.status === "success") {
+        onLoginSuccess(response.data);
+      } else {
+        onLoginFailure(response.message);
+      }
+    }
+
+    function onLoginSuccess(userEntries) {
+      document.getElementById("loginContainer").classList.add("hidden");
+      document.getElementById("userContainer").classList.remove("hidden");
+      document.getElementById("loggedInUser").innerText = document.getElementById("username").value.trim();
+      drawCharts(userEntries);
+      Swal.fire({
+        icon: 'success',
+        title: 'Welcome!',
+        text: 'You have successfully logged in.',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    }
+
+    function onLoginFailure(errorMessage) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Login Failed',
+        text: errorMessage,
+      });
+    }
+
+    function logout() {
+      Swal.fire({
+        title: 'Are you sure?',
+        text: "You will be logged out.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, logout!'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          document.getElementById("userContainer").classList.add("hidden");
+          document.getElementById("loginContainer").classList.remove("hidden");
+          document.getElementById("username").value = "";
+          document.getElementById("password").value = "";
+          clearCharts();
+          Swal.fire({
+            icon: 'success',
+            title: 'Logged Out',
+            text: 'You have been successfully logged out.',
+            timer: 2000,
+            showConfirmButton: false
+          });
+        }
+      });
+    }
+
+    function clearCharts() {
+      var chartContainers = document.querySelectorAll('.chart-container');
+      chartContainers.forEach(container => {
+        container.innerHTML = "";
+      });
+    }
+
+    function drawCharts(userEntries) {
+      drawPieChart(userEntries["Class"], "Class Distribution", "classChart");
+      drawSumChart(userEntries["Report"], "Report Summary", "reportChart");
+      drawBarChart(userEntries["Speaking"], "Speaking Performance", "speakingChart");
+      drawBarChart(userEntries["Reading"], "Reading Performance", "readingChart");
+    }
+
+    function drawPieChart(data, title, elementId) {
+      var dataChart = new google.visualization.DataTable();
+      dataChart.addColumn('string', 'Category');
+      dataChart.addColumn('number', 'Count');
+      
+      var counts = {};
+      data.forEach(function(value) {
+        counts[value] = counts[value] ? counts[value] + 1 : 1;
+      });
+      
+      Object.keys(counts).forEach(function(key) {
+        dataChart.addRow([key, counts[key]]);
+      });
+      
+      var options = {
+        title: title,
+        pieHole: 0.4,
+        height: 300,
+        legend: { position: 'bottom' },
+        colors: ['#4F46E5', '#EC4899', '#10B981', '#F59E0B', '#EF4444']
+      };
+      
+      var chart = new google.visualization.PieChart(document.getElementById(elementId));
+      chart.draw(dataChart, options);
+    }
+
+    function drawBarChart(data, title, elementId) {
+      var dataChart = new google.visualization.DataTable();
+      dataChart.addColumn('string', 'Category');
+      dataChart.addColumn('number', 'Count');
+      
+      var counts = {};
+      data.forEach(function(value) {
+        counts[value] = counts[value] ? counts[value] + 1 : 1;
+      });
+      
+      Object.keys(counts).forEach(function(key) {
+        dataChart.addRow([key, counts[key]]);
+      });
+      
+      var options = {
+        title: title,
+        height: 300,
+        legend: { position: 'none' },
+        colors: ['#3B82F6'],
+        hAxis: {
+          title: 'Categories',
+          titleTextStyle: { color: '#333' }
+        },
+        vAxis: {
+          title: 'Count',
+          titleTextStyle: { color: '#333' },
+          minValue: 0
+        },
+        backgroundColor: '#f9fafb'
+      };
+      
+      var chart = new google.visualization.ColumnChart(document.getElementById(elementId));
+      chart.draw(dataChart, options);
+    }
+
+    function drawSumChart(data, title, elementId) {
+      var sum = data.reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0);
+      var dataChart = new google.visualization.DataTable();
+      dataChart.addColumn('string', 'Category');
+      dataChart.addColumn('number', 'Sum');
+      dataChart.addRow([title, sum]);
+  
+      var options = {
+        title: title,
+        height: 300,
+        legend: { position: 'none' },
+        colors: ['#10B981'],
+        hAxis: {
+          title: title,
+          titleTextStyle: { color: '#333' }
+        },
+        vAxis: {
+          title: 'Total',
+          titleTextStyle: { color: '#333' },
+          minValue: 0
+        },
+        backgroundColor: '#f9fafb'
+      };
+  
+      var chart = new google.visualization.ColumnChart(document.getElementById(elementId));
+      chart.draw(dataChart, options);
+    }
+
+    window.addEventListener('resize', () => {
+      if (!document.getElementById("userContainer").classList.contains("hidden")) {
+        google.script.run.withSuccessHandler(drawCharts).loginUser({
+          username: document.getElementById("loggedInUser").innerText,
+          password: document.getElementById("password").value.trim()
+        });
+      }
+    });
+  </script>
+</body>
+</html>
